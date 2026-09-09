@@ -3,14 +3,16 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import Fuse from 'fuse.js';
 import { createAtom, batch } from '@tanstack/store';
-import { createIcons, ArrowLeft, ArrowUp, ArrowDown, ChevronsUpDown, Sun, Moon, Monitor, List } from 'lucide';
+import { createIcons, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown, Sun, Moon, Monitor, List } from 'lucide';
 import {
   constructTable,
   tableFeatures,
   rowSortingFeature,
+  rowPaginationFeature,
   columnFilteringFeature,
   createSortedRowModel,
   createFilteredRowModel,
+  createPaginatedRowModel,
   sortFn_alphanumeric,
   sortFn_basic,
   type ColumnDef,
@@ -18,12 +20,13 @@ import {
   type Row,
   type Cell,
   type SortingState,
+  type PaginationState,
 } from '@tanstack/table-core';
 import type { TableReactivityBindings } from '@tanstack/table-core/reactivity';
 
 const subscriptions = new Set<() => void>();
 
-const lucideIcons = { ArrowLeft, ArrowUp, ArrowDown, ChevronsUpDown, Sun, Moon, Monitor, List };
+const lucideIcons = { ArrowLeft, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown, Sun, Moon, Monitor, List };
 function refreshIcons(root?: HTMLElement) {
   createIcons({ icons: lucideIcons, root } as Parameters<typeof createIcons>[0]);
 }
@@ -71,7 +74,7 @@ interface Egg {
   jsonPath: string;
   fileName: string;
   downloadPath: string;
-  readme: string;
+  readmePath: string;
 }
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -85,9 +88,11 @@ let filteredEggs: Egg[] = [];
 const features = tableFeatures({
   coreReactivityFeature: vanillaReactivity,
   rowSortingFeature,
+  rowPaginationFeature,
   columnFilteringFeature,
   sortedRowModel: createSortedRowModel(),
   filteredRowModel: createFilteredRowModel(),
+  paginatedRowModel: createPaginatedRowModel(),
   sortFns: {
     alphanumeric: sortFn_alphanumeric,
     basic: sortFn_basic,
@@ -98,6 +103,7 @@ type EggFeatures = typeof features;
 
 const SORTABLE_COLUMN_IDS = ['name', 'variables'] as const;
 const DEFAULT_SORT: SortingState = [{ id: 'name', desc: false }];
+const DEFAULT_PAGE_SIZE = 25;
 
 const columns: ColumnDef<EggFeatures, Egg, unknown>[] = [
   {
@@ -118,6 +124,7 @@ const columns: ColumnDef<EggFeatures, Egg, unknown>[] = [
 let table: Table<EggFeatures, Egg>;
 let tableUnsubscribe: (() => void) | null = null;
 let lastSavedSorting = JSON.stringify(DEFAULT_SORT);
+let currentPagination: PaginationState = { pageIndex: 0, pageSize: DEFAULT_PAGE_SIZE };
 
 function getStoredSorting(): SortingState {
   try {
@@ -149,6 +156,29 @@ function saveSorting(sorting: SortingState) {
   }
 }
 
+function getStoredPageSize(): number {
+  const stored = localStorage.getItem('egg-catalog-page-size');
+  if (stored) {
+    const n = Number(stored);
+    if ([10, 25, 50, 100].includes(n)) return n;
+  }
+  return DEFAULT_PAGE_SIZE;
+}
+
+function getStoredPageIndex(): number {
+  const stored = localStorage.getItem('egg-catalog-page-index');
+  if (stored) {
+    const n = Number(stored);
+    if (Number.isInteger(n) && n >= 0) return n;
+  }
+  return 0;
+}
+
+function savePagination(pagination: PaginationState) {
+  localStorage.setItem('egg-catalog-page-size', String(pagination.pageSize));
+  localStorage.setItem('egg-catalog-page-index', String(pagination.pageIndex));
+}
+
 function createTableInstance(data: Egg[]) {
   if (tableUnsubscribe) {
     tableUnsubscribe();
@@ -156,6 +186,8 @@ function createTableInstance(data: Egg[]) {
   }
   const initialSorting = getStoredSorting();
   lastSavedSorting = JSON.stringify(initialSorting);
+  const storedPageSize = getStoredPageSize();
+  const storedPageIndex = getStoredPageIndex();
   const instance = constructTable({
     features,
     data,
@@ -163,13 +195,20 @@ function createTableInstance(data: Egg[]) {
     enableSortingRemoval: false,
     initialState: {
       sorting: initialSorting,
+      pagination: {
+        pageSize: storedPageSize,
+        pageIndex: Math.min(storedPageIndex, Math.max(0, Math.ceil(data.length / storedPageSize) - 1)),
+      },
     },
   });
   const sub = instance.store.subscribe((currentVal) => {
     saveSorting(currentVal.sorting);
+    savePagination(currentVal.pagination);
+    currentPagination = currentVal.pagination;
     requestAnimationFrame(() => {
       renderRows();
       updateSortArrows(instance);
+      updatePaginationControls(instance);
     });
   });
   tableUnsubscribe = () => sub.unsubscribe();
@@ -190,6 +229,19 @@ function updateSortArrows(instance: Table<EggFeatures, Egg>) {
     th.innerHTML = `<span>${base}</span><i data-lucide="${icon}" class="sort-icon${dir ? ' active' : ''}"${ariaAttr}></i>`;
   });
   refreshIcons();
+}
+
+function updatePaginationControls(instance: Table<EggFeatures, Egg>) {
+  const pageCount = instance.getPageCount();
+  const { pageIndex, pageSize } = currentPagination;
+  const label = document.querySelector<HTMLElement>('.pagination-label');
+  if (label) label.textContent = `Page ${pageIndex + 1} of ${pageCount}`;
+  const prevBtn = document.querySelector<HTMLButtonElement>('.pagination-prev');
+  const nextBtn = document.querySelector<HTMLButtonElement>('.pagination-next');
+  if (prevBtn) prevBtn.disabled = !instance.getCanPreviousPage();
+  if (nextBtn) nextBtn.disabled = !instance.getCanNextPage();
+  const sizeSelect = document.querySelector<HTMLSelectElement>('.pagination-size');
+  if (sizeSelect) sizeSelect.value = String(pageSize);
 }
 
 type Theme = 'system' | 'light' | 'dark';
@@ -266,15 +318,47 @@ function attachThemeListeners() {
 
 let currentTheme: Theme;
 
+function renderPaginationBar(): string {
+  return `
+    <div class="pagination">
+      <button type="button" class="btn pagination-prev"><i data-lucide="arrow-left"></i><span>Prev</span></button>
+      <span class="pagination-label">Page 1 of 1</span>
+      <button type="button" class="btn pagination-next"><span>Next</span><i data-lucide="arrow-right"></i></button>
+      <select class="pagination-size" aria-label="Page size">
+        <option value="10">10</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+  `;
+}
+
+function attachPaginationListeners() {
+  const prevBtn = document.querySelector<HTMLButtonElement>('.pagination-prev');
+  const nextBtn = document.querySelector<HTMLButtonElement>('.pagination-next');
+  const sizeSelect = document.querySelector<HTMLSelectElement>('.pagination-size');
+  prevBtn?.addEventListener('click', () => table.previousPage());
+  nextBtn?.addEventListener('click', () => table.nextPage());
+  sizeSelect?.addEventListener('change', () => {
+    table.setPageSize(Number(sizeSelect.value));
+  });
+}
+
+function isSeeded(): boolean {
+  return eggs.length > 0 && eggs[0].slug.startsWith('seeded-');
+}
+
 function renderTable() {
   clearScrollSpy();
   clearTocDrawer();
   clearScrollTopFab();
+  const seededBadge = isSeeded() ? '<span class="seeded-badge">Seeded test data</span>' : '';
   app.innerHTML = `
     <div class="container">
       <header>
         <h1>Pterodactyl Egg</h1>
-        <p class="subtitle">${eggs.length} egg${eggs.length !== 1 ? 's' : ''} available</p>
+        <p class="subtitle">${eggs.length} egg${eggs.length !== 1 ? 's' : ''} available${seededBadge}</p>
       </header>
       <div class="toolbar">
         <div class="search-bar">
@@ -297,6 +381,7 @@ function renderTable() {
           <tbody></tbody>
         </table>
       </div>
+      ${renderPaginationBar()}
     </div>
     ${renderFooter()}
     ${renderScrollTopFab()}
@@ -304,11 +389,13 @@ function renderTable() {
 
   createTableInstance(filteredEggs);
   updateSortArrows(table);
+  updatePaginationControls(table);
   renderRows();
 
   refreshIcons();
   attachThemeListeners();
   attachScrollTopFab();
+  attachPaginationListeners();
 
   const headers = app.querySelectorAll('thead th');
   headers.forEach((th) => {
@@ -331,14 +418,16 @@ function renderTable() {
       filteredEggs = [...eggs];
     }
     createTableInstance(filteredEggs);
+    table.setPageIndex(0);
     updateSortArrows(table);
+    updatePaginationControls(table);
     renderRows();
   });
 }
 
 function renderRows() {
   const tbody = app.querySelector('tbody')!;
-  const rows = table.getSortedRowModel().rows;
+  const rows = table.getPaginatedRowModel().rows;
 
   if (rows.length === 0) {
     tbody.innerHTML = `<tr><td colspan="${columns.length}" class="empty">No eggs found.</td></tr>`;
@@ -359,7 +448,7 @@ function renderRows() {
             return `<td>${String(cell.getValue() ?? '')}</td>`;
           })
           .join('')}
-       </tr>
+        </tr>
     `
     )
     .join('');
@@ -548,12 +637,11 @@ function attachTocDrawer() {
   };
 }
 
-function showDetail(slug: string) {
+const readmeCache = new Map<string, string>();
+
+async function showDetail(slug: string) {
   const egg = eggs.find((e) => e.slug === slug);
   if (!egg) return;
-
-  const html = DOMPurify.sanitize(marked.parse(egg.readme) as string);
-  const { toc, content } = buildToc(html);
 
   app.innerHTML = `
     <div class="container">
@@ -564,12 +652,12 @@ function showDetail(slug: string) {
       </header>
       <div class="detail-actions">
         <a href="./${egg.downloadPath}" download="${egg.fileName}" class="btn btn-primary">Download egg</a>
-        ${toc ? `<button type="button" class="btn toc-menu-btn" aria-expanded="false" aria-controls="toc-panel"><i data-lucide="list"></i><span>Contents</span></button>` : ''}
+        <button type="button" class="btn toc-menu-btn" aria-expanded="false" aria-controls="toc-panel" style="visibility:hidden"><i data-lucide="list"></i><span>Contents</span></button>
       </div>
-      ${toc ? '<div class="toc-backdrop"></div>' : ''}
       <div class="detail-body">
-        <div class="readme-content">${content}</div>
-        ${toc ? `<aside class="toc-sidebar" id="toc-panel" tabindex="-1">${toc}</aside>` : ''}
+        <div class="readme-content">
+          <p class="readme-loading">Loading...</p>
+        </div>
       </div>
     </div>
     ${renderFooter()}
@@ -577,9 +665,48 @@ function showDetail(slug: string) {
   `;
 
   refreshIcons();
-  attachScrollSpy();
-  attachTocDrawer();
   attachScrollTopFab();
+
+  const contentEl = app.querySelector<HTMLElement>('.readme-content')!;
+
+  const renderReadme = (markdown: string) => {
+    const html = DOMPurify.sanitize(marked.parse(markdown) as string);
+    const { toc, content } = buildToc(html);
+    app.querySelector('.detail-actions')!.innerHTML = `
+      <a href="./${egg.downloadPath}" download="${egg.fileName}" class="btn btn-primary">Download egg</a>
+      ${toc ? `<button type="button" class="btn toc-menu-btn" aria-expanded="false" aria-controls="toc-panel"><i data-lucide="list"></i><span>Contents</span></button>` : ''}
+    `;
+    app.querySelector('.detail-body')!.innerHTML = `
+      <div class="readme-content">${content}</div>
+      ${toc ? `<aside class="toc-sidebar" id="toc-panel" tabindex="-1">${toc}</aside>` : ''}
+    `;
+    refreshIcons();
+    attachScrollSpy();
+    attachTocDrawer();
+  };
+
+  const renderError = () => {
+    contentEl.innerHTML = `<p class="readme-error">Failed to load README. <button type="button" class="btn" id="readme-retry">Retry</button></p>`;
+    refreshIcons();
+    app.querySelector('#readme-retry')!.addEventListener('click', () => {
+      readmeCache.delete(slug);
+      showDetail(slug);
+    });
+  };
+
+  if (readmeCache.has(slug)) {
+    renderReadme(readmeCache.get(slug)!);
+  } else {
+    try {
+      const res = await fetch(`./${egg.readmePath}?v=${__SHORT_HASH__}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      readmeCache.set(slug, text);
+      renderReadme(text);
+    } catch {
+      renderError();
+    }
+  }
 
   app.querySelector('#back')!.addEventListener('click', (e) => {
     e.preventDefault();
