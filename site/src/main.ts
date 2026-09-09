@@ -14,7 +14,6 @@ import {
   createFilteredRowModel,
   createPaginatedRowModel,
   sortFn_alphanumeric,
-  sortFn_basic,
   type ColumnDef,
   type Table,
   type Row,
@@ -57,19 +56,11 @@ const vanillaReactivity: TableReactivityBindings = {
   },
 };
 
-interface EggVariable {
-  name: string;
-  envVariable: string;
-  description: string;
-}
-
 interface Egg {
   slug: string;
   name: string;
   author: string;
   description: string;
-  dockerImages: string[];
-  variables: EggVariable[];
   path: string;
   jsonPath: string;
   fileName: string;
@@ -95,13 +86,12 @@ const features = tableFeatures({
   paginatedRowModel: createPaginatedRowModel(),
   sortFns: {
     alphanumeric: sortFn_alphanumeric,
-    basic: sortFn_basic,
   },
 });
 
 type EggFeatures = typeof features;
 
-const SORTABLE_COLUMN_IDS = ['name', 'variables'] as const;
+const SORTABLE_COLUMN_IDS = ['name'] as const;
 const DEFAULT_SORT: SortingState = [{ id: 'name', desc: false }];
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -111,13 +101,6 @@ const columns: ColumnDef<EggFeatures, Egg, unknown>[] = [
     header: 'Name',
     cell: (info) => String(info.getValue()),
     sortFn: 'alphanumeric',
-  },
-  {
-    id: 'variables',
-    header: 'Variables',
-    accessorFn: (row) => row.variables.length,
-    cell: (info) => String(info.getValue()),
-    sortFn: 'basic',
   },
 ];
 

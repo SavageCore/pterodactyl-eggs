@@ -63,7 +63,7 @@ function generateReadme(slug, rng) {
   return lines.join('\n');
 }
 
-function generateEggJson(name, variables) {
+function generateEggJson(name) {
   return JSON.stringify({
     meta: { version: 'PTDL_v2', update_url: null },
     name,
@@ -72,7 +72,7 @@ function generateEggJson(name, variables) {
     docker_images: { latest: 'ghcr.io/ptero-eggs/seeded:latest' },
     config: { startup: '{}', logs: '{}', files: '{}' },
     scripts: { installation: { script: '#!/bin/bash\necho install', container: 'alpine', entrypoint: 'ash' } },
-    variables,
+    variables: [],
   }, null, 2);
 }
 
@@ -88,29 +88,18 @@ function generateDummyEggs(count) {
     const fileName = `egg-${slug}.json`;
     const downloadPath = `eggs/${slug}/${fileName}`;
     const readmePath = `data/readme/${slug}.md`;
-    const varCount = Math.floor(rng() * 9);
-    const variables = [];
-    for (let v = 0; v < varCount; v++) {
-      variables.push({
-        name: `[${adj}] Var ${v + 1}`,
-        envVariable: `${adj.toUpperCase()}_VAR_${v + 1}`,
-        description: `Seeded variable ${v + 1} for ${name}.`,
-      });
-    }
     eggs.push({
       slug,
       name,
       author: 'seeded@example.com',
       description: `Deterministic test entry #${i + 1}: ${adj} ${noun}.`,
-      dockerImages: ['ghcr.io/ptero-eggs/seeded:latest'],
-      variables,
       path: `seeded/${slug}`,
       jsonPath: `seeded/${slug}/${fileName}`,
       fileName,
       downloadPath,
       readmePath,
       readme: generateReadme(slug, rng),
-      eggJson: generateEggJson(name, variables),
+      eggJson: generateEggJson(name),
     });
   }
   return eggs;
@@ -162,13 +151,6 @@ async function main() {
         console.warn(`WARN: No README.md for ${relFolder}`);
       }
 
-      const dockerImages = Object.values(parsed.docker_images || {});
-      const variables = (parsed.variables || []).map((v) => ({
-        name: v.name,
-        envVariable: v.env_variable,
-        description: v.description,
-      }));
-
       const originalFileName = basename(jsonPath);
       const downloadPath = `eggs/${slug}/${originalFileName}`;
       const readmePath = `data/readme/${slug}.md`;
@@ -178,8 +160,6 @@ async function main() {
         name: parsed.name,
         author: parsed.author,
         description: parsed.description || '',
-        dockerImages,
-        variables,
         path: relFolder,
         jsonPath: join(relFolder, originalFileName),
         fileName: originalFileName,
