@@ -69,6 +69,8 @@ interface Egg {
   variables: EggVariable[];
   path: string;
   jsonPath: string;
+  fileName: string;
+  downloadPath: string;
   readme: string;
 }
 
@@ -561,7 +563,7 @@ function showDetail(slug: string) {
         <p>${escapeHtml(egg.description)}</p>
       </header>
       <div class="detail-actions">
-        <a href="./eggs/${egg.slug}/egg.json" download class="btn btn-primary">Download egg</a>
+        <a href="./${egg.downloadPath}" download="${egg.fileName}" class="btn btn-primary">Download egg</a>
         ${toc ? `<button type="button" class="btn toc-menu-btn" aria-expanded="false" aria-controls="toc-panel"><i data-lucide="list"></i><span>Contents</span></button>` : ''}
       </div>
       ${toc ? '<div class="toc-backdrop"></div>' : ''}

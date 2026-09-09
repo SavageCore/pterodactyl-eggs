@@ -1,5 +1,5 @@
 import { glob } from 'glob';
-import { readFile, writeFile, mkdir, copyFile } from 'fs/promises';
+import { readFile, writeFile, mkdir, copyFile, rm } from 'fs/promises';
 import { resolve, dirname, join, relative, basename } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -18,6 +18,9 @@ function slugifyFilePath(jsonPath) {
 }
 
 async function main() {
+  await rm(sitePublicEggsDir, { recursive: true, force: true });
+  await rm(siteDataDir, { recursive: true, force: true });
+
   const pattern = join(repoRoot, 'eggs/**/egg-*.json');
   const files = await glob(pattern, {
     ignore: ['**/node_modules/**', '**/site/**', '**/.git/**'],
@@ -57,6 +60,9 @@ async function main() {
       description: v.description,
     }));
 
+    const originalFileName = basename(jsonPath);
+    const downloadPath = `eggs/${slug}/${originalFileName}`;
+
     eggs.push({
       slug,
       name: parsed.name,
@@ -65,13 +71,15 @@ async function main() {
       dockerImages,
       variables,
       path: relFolder,
-      jsonPath: join(relFolder, basename(jsonPath)),
+      jsonPath: join(relFolder, originalFileName),
+      fileName: originalFileName,
+      downloadPath,
       readme,
     });
 
     const publicEggDir = join(sitePublicEggsDir, slug);
     await mkdir(publicEggDir, { recursive: true });
-    await copyFile(jsonPath, join(publicEggDir, 'egg.json'));
+    await copyFile(jsonPath, join(publicEggDir, originalFileName));
 
     console.log(`  ${slug} -> ${parsed.name}`);
   }
