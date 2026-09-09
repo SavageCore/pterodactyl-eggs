@@ -9,7 +9,9 @@ const siteDataDir = join(repoRoot, 'site', 'public', 'data');
 const sitePublicEggsDir = join(repoRoot, 'site', 'public', 'eggs');
 
 function slugifyFolderPath(folderPath) {
-  return relative(repoRoot, folderPath).toLowerCase().replace(/\//g, '-');
+  const rel = relative(repoRoot, folderPath);
+  const withoutTop = rel.replace(/^eggs[\/\\]/i, '');
+  return withoutTop.toLowerCase().replace(/[\/\\]/g, '-');
 }
 
 function slugifyFilePath(jsonPath) {
