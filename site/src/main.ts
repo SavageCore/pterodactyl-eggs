@@ -234,6 +234,22 @@ function updateSortArrows(instance: Table<EggFeatures, Egg>) {
 function updatePaginationControls(instance: Table<EggFeatures, Egg>) {
   const pageCount = instance.getPageCount();
   const { pageIndex, pageSize } = currentPagination;
+  const total = eggs.length;
+  const filtered = filteredEggs.length;
+  const start = filtered === 0 ? 0 : pageIndex * pageSize + 1;
+  const end = Math.min((pageIndex + 1) * pageSize, filtered);
+  const countEl = document.querySelector<HTMLElement>('.pagination-count');
+  if (countEl) {
+    const eggWordN = (n: number) => (n === 1 ? 'egg' : 'eggs');
+    const filteredNote = filtered < total ? ` (filtered from ${total})` : '';
+    if (filtered === 0) {
+      countEl.textContent = total === 0 ? 'No eggs available' : `0 of ${total} ${eggWordN(total)}`;
+    } else if (start === 1 && end === filtered) {
+      countEl.textContent = `${filtered}${filteredNote} ${eggWordN(filtered)}`;
+    } else {
+      countEl.textContent = `${start}-${end} of ${filtered}${filteredNote} ${eggWordN(filtered)}`;
+    }
+  }
   const label = document.querySelector<HTMLElement>('.pagination-label');
   if (label) label.textContent = `Page ${pageIndex + 1} of ${pageCount}`;
   const prevBtn = document.querySelector<HTMLButtonElement>('.pagination-prev');
@@ -321,6 +337,7 @@ let currentTheme: Theme;
 function renderPaginationBar(): string {
   return `
     <div class="pagination">
+      <span class="pagination-count" aria-live="polite">Showing 0 of 0</span>
       <button type="button" class="btn pagination-prev"><i data-lucide="arrow-left"></i><span>Prev</span></button>
       <span class="pagination-label">Page 1 of 1</span>
       <button type="button" class="btn pagination-next"><span>Next</span><i data-lucide="arrow-right"></i></button>
@@ -358,7 +375,7 @@ function renderTable() {
     <div class="container">
       <header>
         <h1>Pterodactyl Egg</h1>
-        <p class="subtitle">${eggs.length} egg${eggs.length !== 1 ? 's' : ''} available${seededBadge}</p>
+        <p class="subtitle">A curated collection of game server eggs${seededBadge}</p>
       </header>
       <div class="toolbar">
         <div class="search-bar">

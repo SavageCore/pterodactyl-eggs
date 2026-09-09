@@ -261,6 +261,12 @@ tbody tr.clickable {
   margin: 0 0.25rem;
 }
 
+.pagination-count {
+  color: var(--subtext0);
+  font-size: 0.9rem;
+  margin-right: auto;
+}
+
 .pagination .btn {
   padding: 0.5rem 0.875rem;
   background: var(--surface0);
@@ -699,6 +705,12 @@ input[type='checkbox'] {
 
   .pagination-size {
     margin-left: 0;
+  }
+
+  .pagination-count {
+    margin-right: 0;
+    width: 100%;
+    order: -1;
   }
 
   .toc-menu-btn {
