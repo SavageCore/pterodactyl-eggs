@@ -753,20 +753,36 @@ function attachScrollTopFab() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
+  function updateFabVisibility() {
+    const scrollY = window.scrollY;
+    const innerHeight = window.innerHeight;
+    const docHeight = document.documentElement.scrollHeight;
+    const threshold = 200;
+    const nearBottom = scrollY + innerHeight >= docHeight - 100;
+    if (scrollY > threshold || nearBottom) {
+      fab!.classList.add('visible');
+    } else {
+      fab!.classList.remove('visible');
+    }
+  }
+
   let ticking = false;
   function onScroll() {
     if (ticking) return;
     ticking = true;
     requestAnimationFrame(() => {
-      if (window.scrollY > 600) fab!.classList.add('visible');
-      else fab!.classList.remove('visible');
+      updateFabVisibility();
       ticking = false;
     });
   }
 
   window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', updateFabVisibility, { passive: true });
+  updateFabVisibility();
+
   scrollTopFabCleanup = () => {
     window.removeEventListener('scroll', onScroll);
+    window.removeEventListener('resize', updateFabVisibility);
   };
 }
 
