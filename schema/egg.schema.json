@@ -1,0 +1,206 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/savagecore/pterodactyl-eggs/main/schema/egg.schema.json",
+  "title": "Pterodactyl Egg (PTDL_v2)",
+  "description": "Schema for Pterodactyl PTDL_v2 egg export format. Based on pterodactyl/panel validation rules from app/Models/Egg.php, app/Models/EggVariable.php, and app/Services/Eggs/EggParserService.php. Note: config.stop/startup/logs/files are treated as required (not required_without config_from) for portable eggs - see plan for details.",
+  "type": "object",
+  "required": [
+    "meta",
+    "name",
+    "author",
+    "docker_images",
+    "startup",
+    "config"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "enum": ["PTDL_v1", "PTDL_v2"],
+          "description": "PTDL format version. This repo recommends PTDL_v2."
+        },
+        "update_url": {
+          "type": ["string", "null"],
+          "description": "URL to check for updates."
+        }
+      },
+      "additionalProperties": true
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 191,
+      "description": "Display name of the egg."
+    },
+    "description": {
+      "type": ["string", "null"],
+      "description": "Short description of the egg."
+    },
+    "features": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      },
+      "description": "List of features supported by this egg."
+    },
+    "author": {
+      "type": "string",
+      "format": "email",
+      "description": "Author contact email."
+    },
+    "file_denylist": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      },
+      "description": "Files that should be denied."
+    },
+    "docker_images": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 191,
+        "pattern": "^[\\w#./\\- ]*\\|?~?[\\w./\\-:@ ]*$"
+      },
+      "description": "Docker images used by this egg. Must have at least one entry."
+    },
+    "startup": {
+      "type": ["string", "null"],
+      "description": "Startup command configuration."
+    },
+    "config": {
+      "type": "object",
+      "required": [
+        "stop",
+        "startup",
+        "logs",
+        "files"
+      ],
+      "properties": {
+        "stop": {
+          "type": ["string", "null"],
+          "maxLength": 191,
+          "description": "Stop command sent to the server."
+        },
+        "startup": {
+          "type": ["string", "null"],
+          "description": "JSON-encoded string describing startup detection."
+        },
+        "logs": {
+          "type": ["string", "null"],
+          "description": "JSON-encoded string describing log configuration."
+        },
+        "files": {
+          "type": ["string", "null"],
+          "description": "JSON-encoded string describing file configuration."
+        }
+      },
+      "additionalProperties": true
+    },
+    "scripts": {
+      "type": "object",
+      "properties": {
+        "installation": {
+          "type": "object",
+          "properties": {
+            "script": {
+              "type": "string"
+            },
+            "container": {
+              "type": "string"
+            },
+            "entrypoint": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "variables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/EggVariable"
+      },
+      "description": "User-configurable variables for this egg."
+    },
+    "force_outgoing_ip": {
+      "type": "boolean",
+      "description": "Force outgoing IP (rarely present in exports)."
+    },
+    "exported_at": {
+      "type": "string",
+      "description": "ISO timestamp when the egg was exported."
+    }
+  },
+  "additionalProperties": true,
+  "definitions": {
+    "EggVariable": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "env_variable",
+        "default_value",
+        "user_viewable",
+        "user_editable",
+        "rules"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 191,
+          "description": "Display name of the variable."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of what the variable controls."
+        },
+        "env_variable": {
+          "type": "string",
+          "pattern": "^[\\w]{1,191}$",
+          "not": {
+            "enum": [
+              "SERVER_MEMORY",
+              "SERVER_IP",
+              "SERVER_PORT",
+              "ENV",
+              "HOME",
+              "USER",
+              "STARTUP",
+              "SERVER_UUID",
+              "UUID"
+            ]
+          },
+          "description": "Environment variable name. Must be word characters only, 1-191 long, and not a reserved name."
+        },
+        "default_value": {
+          "type": "string",
+          "description": "Default value for the variable."
+        },
+        "user_viewable": {
+          "type": "boolean",
+          "description": "Whether the user can view this variable."
+        },
+        "user_editable": {
+          "type": "boolean",
+          "description": "Whether the user can edit this variable."
+        },
+        "rules": {
+          "type": "string",
+          "description": "Validation rules (Laravel-style pipe-delimited string)."
+        },
+        "field_type": {
+          "type": "string",
+          "description": "Field type hint (legacy, not used in PTDL_v2)."
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

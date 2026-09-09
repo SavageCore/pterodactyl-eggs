@@ -1,0 +1,25 @@
+{
+  "name": "egg-catalog-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node ../scripts/build-data.mjs",
+    "dev": "vite",
+    "dev:remote": "vite --host",
+    "prebuild": "node ../scripts/build-data.mjs",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tanstack/table-core": "^9.2.4",
+    "dompurify": "^3.2.3",
+    "fuse.js": "^7.0.0",
+    "lucide": "^1.43.0",
+    "marked": "^18.0.11"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  }
+}
