@@ -8,35 +8,13 @@ ReSkate is a fan project that brings skate. offline play, Steam lobbies, parties
 
 ## Which release this installs
 
-Each ReSkate release ships a Windows package, and the releases that have a published Linux package also ship `ReSkateServer-Linux-<version>.zip`. The egg downloads that archive and nothing else: no compiler, no source build.
+Since v1.0.8 each ReSkate release ships the native Linux server alongside the Windows one, as `ReSkateServer-Linux-<version>.tar.gz`. The egg downloads that archive and nothing else: no compiler, no source build.
 
-Leave `[INSTALL] ReSkate Version` empty to take the newest release. If the newest release does not have a Linux package yet, the install stops and prints the exact URL it wanted, for example:
+Set `[INSTALL] ReSkate Version` to pin a particular release, for example `v1.0.8`, or leave it empty to
+take the newest one. Packages come from the project's own releases, and v1.0.8 is the first that carries
+one, so older tags cannot be installed.
 
-```
-error: could not download https://github.com/Dingo-Shenanigans/ReSkate/releases/download/v1.0.6/ReSkateServer-Linux-1.0.6.zip.
-```
-
-Check <https://github.com/Dingo-Shenanigans/ReSkate/releases> for the releases that list a `ReSkateServer-Linux-*.zip` asset, set `[INSTALL] ReSkate Version` to one of those tags, and reinstall.
-
-Two variables decide what gets installed:
-
-| Variable | Default | Effect |
-|----------|---------|--------|
-| `[INSTALL] Repository` | `Dingo-Shenanigans/ReSkate` | The `owner/name` releases are downloaded from |
-| `[INSTALL] ReSkate Version` | empty | The tag to install. Empty takes the newest one in that repository |
-
-### Installing from a fork
-
-While the official releases carry no Linux package, `[INSTALL] Repository` lets you install from anywhere that does publish one. A fork qualifies if it has a `v<major>.<minor>.<patch>` tag whose release lists `ReSkateServer-Linux-<version>.zip`:
-
-```
-[INSTALL] Repository    SavageCore/ReSkate
-[INSTALL] ReSkate Version  v1.0.7
-```
-
-A repository with no tags fails before downloading anything, so leave `ReSkate Version` empty only when the repository has releases to pick from.
-
-`world-layers.json` is fetched from the same repository, then falls back to the project's own releases, since a fork may publish no Windows package. The catalog describes the game rather than the server build, so either source is the same file.
+`world-layers.json` ships inside the Linux package, so nothing extra is downloaded for it.
 
 The server has **no self-update on Linux**, so a reinstall is also how you move to a newer release. Your `ReSkateServer.json`, `Mods/` and bans carry over: back them up first if you care about them.
 
@@ -133,11 +111,11 @@ Admins then type `/` followed by a command in game chat, such as `/kick <player>
 
 ## Time of Day and World Layers
 
-`world-layers.json` is the catalog of the world's time-of-day and layer states. The Linux package does not carry it, so the egg fetches it from the matching Windows package during install (`[INSTALL] World Layers File`).
+`world-layers.json` is the catalog of the world's time-of-day and layer states. It ships in the Linux package, which is why time of day works out of the box.
 
-With the file in place, set `[SERVER] World Layer Sync` to `1` to force the same time of day and layers on everyone, and use `tod <default\|morning\|noon\|afternoon\|evening\|night>` in the console. Without it every player keeps their own.
+Set `[SERVER] World Layer Sync` to `1` to force the same time of day and layers on everyone, then use `tod <default|morning|noon|afternoon|evening|night>` in the console. With it off, every player keeps their own.
 
-Exporting a fresh catalog needs the Windows game, so re-run the fetch by reinstalling after a game update, or copy one from a player's `%LOCALAPPDATA%\ReSkate\cache\` folder.
+The catalog is tied to the game build, so reinstall after a game update to pick up a newer one. Producing one from scratch needs the Windows game; you can also copy one from a player's `%LOCALAPPDATA%\ReSkate\cache\` folder.
 
 ---
 
@@ -179,8 +157,8 @@ If the server is ever moved or restored from a backup, check that `.steam/sdk64/
 
 | Symptom | Cause and fix |
 |---------|---------------|
-| Install stops at `could not download ...ReSkateServer-Linux-<version>.zip` | That release has no published Linux package. Pick a tag that lists one, wait for the next release, or point `[INSTALL] Repository` at a repository that publishes them |
-| Install stops at `... has no v<major>.<minor>.<patch> tags` | `[INSTALL] Repository` points at a repository with no tags. Check the spelling, or set `[INSTALL] ReSkate Version` yourself |
+| Install stops at `could not download ...ReSkateServer-Linux-<version>.tar.gz` | That release does not carry the Linux package, or the download failed. Releases from v1.0.8 have one: check <https://github.com/Dingo-Shenanigans/ReSkate/releases>, set `[INSTALL] ReSkate Version` to a tag that does, and reinstall |
+| Install stops at `... has no v<major>.<minor>.<patch> tags` | The project's release list could not be read, or every tag is a pre-release. Set `[INSTALL] ReSkate Version` to the tag you want |
 | Panel stays on "starting" | The startup line the Panel waits for is the join code, printed only after the server has signed in to Steam. A sign-in that cannot reach Steam times out after 60 seconds and the server exits |
 | `Cannot load .../libsteam_api.so` | The package did not unpack completely. Reinstall |
 | `Failed to load module '.../.steam/sdk64/steamclient.so'` | The `.steam/sdk64` symlinks are gone. Reinstall, or recreate them: `ln -sf ../../steamclient.so /home/container/.steam/sdk64/steamclient.so` |
