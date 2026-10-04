@@ -349,10 +349,20 @@ function isSeeded(): boolean {
   return eggs.length > 0 && eggs[0].slug.startsWith('seeded-');
 }
 
+let currentQuery = '';
+
+function applyQuery(query: string) {
+  currentQuery = query;
+  filteredEggs = query ? fuse.search(query).map((r) => r.item) : [...eggs];
+}
+
 function renderTable() {
   clearScrollSpy();
   clearTocDrawer();
   clearScrollTopFab();
+  document.title = SITE_TITLE;
+  window.scrollTo(0, 0);
+  applyQuery(currentQuery);
   const seededBadge = isSeeded() ? '<span class="seeded-badge">Seeded test data</span>' : '';
   app.innerHTML = `
     <div class="container">
@@ -409,14 +419,10 @@ function renderTable() {
   });
 
   const searchInput = app.querySelector<HTMLInputElement>('#search')!;
+  searchInput.value = currentQuery;
   searchInput.addEventListener('input', () => {
     const value = searchInput.value.trim();
-    if (value) {
-      const results = fuse.search(value);
-      filteredEggs = results.map((r) => r.item);
-    } else {
-      filteredEggs = [...eggs];
-    }
+    applyQuery(value);
     createTableInstance(filteredEggs);
     table.setPageIndex(0);
     updateSortArrows(table);
@@ -426,7 +432,8 @@ function renderTable() {
 }
 
 function renderRows() {
-  const tbody = app.querySelector('tbody')!;
+  const tbody = app.querySelector('tbody');
+  if (!tbody) return;
   const rows = table.getPaginatedRowModel().rows;
 
   if (rows.length === 0) {
@@ -443,7 +450,8 @@ function renderRows() {
           .map((cell: Cell<EggFeatures, Egg, unknown>) => {
             const column = cell.column.columnDef;
             if (typeof column.cell === 'function') {
-              return `<td>${String(column.cell(cell.getContext()))}</td>`;
+              const value = String(column.cell(cell.getContext()));
+              return `<td><a class="egg-link" href="${detailUrl(row.original.slug)}">${escapeHtml(value)}</a></td>`;
             }
             return `<td>${String(cell.getValue() ?? '')}</td>`;
           })
@@ -454,9 +462,19 @@ function renderRows() {
     .join('');
 
   tbody.querySelectorAll('.clickable').forEach((tr) => {
-    tr.addEventListener('click', () => {
+    tr.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('a')) return;
       const slug = tr.getAttribute('data-slug')!;
-      showDetail(slug);
+      openDetail(slug);
+    });
+  });
+
+  tbody.querySelectorAll<HTMLAnchorElement>('a.egg-link').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      const slug = a.closest('tr')!.getAttribute('data-slug')!;
+      openDetail(slug);
     });
   });
 }
@@ -639,13 +657,98 @@ function attachTocDrawer() {
 
 const readmeCache = new Map<string, string>();
 
+const SITE_TITLE = 'SavageCore\'s Pterodactyl Eggs';
+const EGG_PARAM = 'egg';
+
+let lastRouteKey = '';
+let tableEntryBehind = false;
+
+function routeKey(): string {
+  return window.location.pathname + window.location.search;
+}
+
+function currentSlug(): string | null {
+  return new URLSearchParams(window.location.search).get(EGG_PARAM);
+}
+
+function detailUrl(slug: string): string {
+  const url = new URL(window.location.href);
+  url.search = `?${EGG_PARAM}=${encodeURIComponent(slug)}`;
+  url.hash = '';
+  return url.pathname + url.search;
+}
+
+function tableUrl(): string {
+  return window.location.pathname;
+}
+
+function openDetail(slug: string) {
+  history.pushState({ view: 'detail', slug }, '', detailUrl(slug));
+  tableEntryBehind = true;
+  lastRouteKey = routeKey();
+  void showDetail(slug);
+}
+
+function navigateTable({ replace = false } = {}) {
+  history[replace ? 'replaceState' : 'pushState']({ view: 'table' }, '', tableUrl());
+  tableEntryBehind = false;
+  lastRouteKey = routeKey();
+  renderTable();
+}
+
+function goToTable() {
+  if (tableEntryBehind) {
+    history.back();
+    return;
+  }
+  navigateTable({ replace: true });
+}
+
+function onPopState() {
+  const key = routeKey();
+  if (key === lastRouteKey) return;
+  lastRouteKey = key;
+  tableEntryBehind = false;
+  const slug = currentSlug();
+  if (slug) {
+    void showDetail(slug);
+  } else {
+    renderTable();
+  }
+}
+
+function renderNotFound(slug: string) {
+  app.innerHTML = `
+    <div class="container">
+      <a href="${tableUrl()}" class="back-link" id="back"><i data-lucide="arrow-left"></i><span>Back to table</span></a>
+      <header>
+        <h1>Egg not found</h1>
+        <p>No egg matches &ldquo;${escapeHtml(slug)}&rdquo;. It may have been removed from the catalog.</p>
+      </header>
+    </div>
+    ${renderFooter()}
+    ${renderScrollTopFab()}
+  `;
+  document.title = `Egg not found - ${SITE_TITLE}`;
+  window.scrollTo(0, 0);
+  refreshIcons();
+  attachScrollTopFab();
+  app.querySelector('#back')!.addEventListener('click', (e) => {
+    e.preventDefault();
+    goToTable();
+  });
+}
+
 async function showDetail(slug: string) {
   const egg = eggs.find((e) => e.slug === slug);
-  if (!egg) return;
+  if (!egg) {
+    renderNotFound(slug);
+    return;
+  }
 
   app.innerHTML = `
     <div class="container">
-      <a href="#" class="back-link" id="back"><i data-lucide="arrow-left"></i><span>Back to table</span></a>
+      <a href="${tableUrl()}" class="back-link" id="back"><i data-lucide="arrow-left"></i><span>Back to table</span></a>
       <header>
         <h1>${escapeHtml(egg.name)}</h1>
         <p>${escapeHtml(egg.description)}</p>
@@ -664,6 +767,8 @@ async function showDetail(slug: string) {
     ${renderScrollTopFab()}
   `;
 
+  document.title = `${egg.name} - ${SITE_TITLE}`;
+  window.scrollTo(0, 0);
   refreshIcons();
   attachScrollTopFab();
 
@@ -710,11 +815,7 @@ async function showDetail(slug: string) {
 
   app.querySelector('#back')!.addEventListener('click', (e) => {
     e.preventDefault();
-    history.pushState({}, '', window.location.pathname);
-    clearScrollSpy();
-    clearTocDrawer();
-    clearScrollTopFab();
-    renderTable();
+    goToTable();
   });
 }
 
@@ -804,6 +905,13 @@ function renderFooter(): string {
 async function init() {
   currentTheme = initTheme();
 
+  if ('history' in window && 'scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+  }
+  history.replaceState({ view: 'table' }, '', window.location.href);
+  lastRouteKey = routeKey();
+  window.addEventListener('popstate', onPopState);
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
@@ -822,7 +930,12 @@ async function init() {
     threshold: 0.3,
   });
 
-  renderTable();
+  const slug = currentSlug();
+  if (slug) {
+    void showDetail(slug);
+  } else {
+    renderTable();
+  }
 }
 
 init();
