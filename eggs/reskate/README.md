@@ -2,7 +2,7 @@
 
 ReSkate is a fan project that brings skate. offline play, Steam lobbies, parties, throwdowns and dedicated servers. This egg runs its **headless dedicated server as a native Linux x86_64 binary**: no game install, no Proton and no Wine, and it is a lobby host rather than a game server, so it stays small.
 
-> Note: the native Linux server is the newest part of ReSkate and is still moving. Expect the occasional rough edge, and expect a reinstall to be how you pick up upstream changes.
+> Note: the native Linux server is the newest part of ReSkate and is still moving, so expect the occasional rough edge.
 
 ---
 
@@ -16,7 +16,7 @@ one, so older tags cannot be installed.
 
 `world-layers.json` ships inside the Linux package, so nothing extra is downloaded for it.
 
-The server has **no self-update on Linux**, so a reinstall is also how you move to a newer release. Your `ReSkateServer.json`, `Mods/` and bans carry over: back them up first if you care about them.
+See [Updating](#updating) for how releases are picked up.
 
 ---
 
@@ -92,6 +92,12 @@ These are arrays or nested objects, so they are left alone by the Panel and pers
 
 The Panel rewrites the managed keys but keeps everything else, so console changes to the settings above survive a restart while Panel-managed values are reset to the Panel.
 
+### Why the on/off settings are not in `config.files`
+
+Pterodactyl's JSON parser writes only scalars, so a `true` in `config.files` is written as `1`. ReSkate reads those keys as booleans and exits with `Cannot read ReSkateServer.json` when it finds a number instead, so no on/off setting can be listed there.
+
+The startup command therefore rewrites those ten keys with `sed` immediately before launching, and `config.files` keeps to the scalar keys. If you are editing this egg, do not "tidy" the `sed` loop into `config.files` - it will break the server on boot.
+
 ---
 
 ## How to Join
@@ -116,6 +122,23 @@ Admins then type `/` followed by a command in game chat, such as `/kick <player>
 Set `[SERVER] World Layer Sync` to `1` to force the same time of day and layers on everyone, then use `tod <default|morning|noon|afternoon|evening|night>` in the console. With it off, every player keeps their own.
 
 The catalog is tied to the game build, so reinstall after a game update to pick up a newer one. Producing one from scratch needs the Windows game; you can also copy one from a player's `%LOCALAPPDATA%\ReSkate\cache\` folder.
+
+---
+
+## Updating
+
+ReSkate's Linux server cannot update itself, so the egg does it: `[SERVER] Auto Update` is on by default, and each time the server starts it checks for a newer release and, if there is one, replaces the server **before** anyone is connected. Nothing prints when there is nothing to do, and a failed update is a warning that leaves the installed version running.
+
+Your settings survive an update. `ReSkateServer.json`, `Mods/`, the Steam library links and your bans all carry over; only the shipped files are replaced.
+
+Two things turn it off:
+
+| Setting | Effect |
+|---------|--------|
+| `[SERVER] Auto Update` = `0` | Never updates. You control releases by reinstalling |
+| `[INSTALL] ReSkate Version` set to a tag | Holds that release. Useful for pinning a known-good version, or while a new one is being tested |
+
+Note that the running server stays on the release it was updated to until the **next** restart, and it reports the version it is running in the startup lines.
 
 ---
 
@@ -148,6 +171,8 @@ The binary, the Steam libraries and the `ReSkateServer.log` the server writes ar
 | `.steam/sdk64/` | Symlinks to those libraries. `libsteam_api.so` loads `steamclient.so` from here, so **deleting this folder stops the server from starting** |
 | `world-layers.json` | Time of day and world layer catalog |
 | `Mods/` | Custom maps. Each mod's `reskate-levels.json` is all that is read |
+| `update-reskate.sh` | The updater the startup command runs |
+| `.reskate-version` | The release currently installed |
 
 If the server is ever moved or restored from a backup, check that `.steam/sdk64/steamclient.so` still points at `steamclient.so` next to the binary.
 
