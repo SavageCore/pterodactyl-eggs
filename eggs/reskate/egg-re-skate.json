@@ -4,7 +4,7 @@
         "version": "PTDL_v2",
         "update_url": null
     },
-    "exported_at": "2026-10-05T03:58:04+01:00",
+    "exported_at": "2026-10-05T06:00:18+01:00",
     "name": "ReSkate",
     "author": "talk@savagecore.uk",
     "description": "skate. in Early Access, with ReSkate: play offline, host Steam lobbies, and run dedicated servers. This egg runs the native Linux headless server, so no game install and no Wine are needed.",
@@ -18,7 +18,7 @@
         "files": "{\r\n    \"ReSkateServer.json\": {\r\n        \"parser\": \"json\",\r\n        \"find\": {\r\n            \"name\": \"{{server.build.env.SERVER_NAME}}\",\r\n            \"map\": \"{{server.build.env.SERVER_MAP}}\",\r\n            \"max_players\": \"{{server.build.env.MAX_PLAYERS}}\",\r\n            \"password\": \"{{server.build.env.SERVER_PASSWORD}}\",\r\n            \"welcome\": \"{{server.build.env.WELCOME_MESSAGE}}\",\r\n            \"port\": \"{{server.build.default.port}}\",\r\n            \"query_port\": \"{{server.build.env.QUERY_PORT}}\",\r\n            \"tps\": \"{{server.build.env.TPS}}\",\r\n            \"voice_range\": \"{{server.build.env.VOICE_RANGE}}\",\r\n            \"party_size\": \"{{server.build.env.PARTY_SIZE}}\",\r\n            \"object_placement\": \"{{server.build.env.OBJECT_PLACEMENT}}\",\r\n            \"speed_check\": \"{{server.build.env.SPEED_CHECK}}\",\r\n            \"score_check\": \"{{server.build.env.SCORE_CHECK}}\"\r\n        }\r\n    }\r\n}",
         "startup": "{\r\n    \"done\": \"Join code:\"\r\n}",
         "logs": "[]",
-        "stop": "^C"
+        "stop": "quit"
     },
     "scripts": {
         "installation": {
