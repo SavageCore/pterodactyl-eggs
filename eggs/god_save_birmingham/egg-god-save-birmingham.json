@@ -1,0 +1,122 @@
+{
+  "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2026-10-19T14:30:00+01:00",
+  "name": "God Save Birmingham Core Group Test Dedicated Server",
+  "author": "talk@savagecore.uk",
+  "description": "Judgment Day has come to medieval Birmingham, and a plague of flesh-hungry ghouls has claimed every living soul… except one. Fight to survive in a highly tactile, physics-based survival sim where every object can be manipulated. Make ends meet, or meet your end.",
+  "features": ["steam_disk_space"],
+  "docker_images": {
+    "ghcr.io\/ptero-eggs\/steamcmd:proton": "ghcr.io\/ptero-eggs\/steamcmd:proton"
+  },
+  "file_denylist": [],
+  "startup": "[ -f /home/container/MZClient/Binaries/Win64/steamclient64.dll ] || cp -f /home/container/steamclient64.dll /home/container/MZClient/Binaries/Win64/steamclient64.dll; PROTON_USE_XALIA=0 proton run /home/container/MZClient/Binaries/Win64/MZServer-Win64-Shipping.exe -log -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} & GSB_PID=$!; ( while kill -0 $GSB_PID 2>/dev/null; do if ss -uln | grep -q \":{{SERVER_PORT}} \"; then echo \"God Save Birmingham server is listening on port {{SERVER_PORT}}\"; break; fi; sleep 2; done ) & wait $GSB_PID",
+  "config": {
+    "files": "{\r\n    \"MZClient/Saved/Config/serverconfig.json\": {\r\n        \"parser\": \"json\",\r\n        \"find\": {\r\n            \"port\": \"{{server.build.default.port}}\",\r\n            \"public\": \"{{server.build.env.SERVER_PUBLIC}}\",\r\n            \"name\": \"{{server.build.env.SERVER_NAME}}\",\r\n            \"description\": \"{{server.build.env.SERVER_DESCRIPTION}}\",\r\n            \"publicAddress\": \"{{server.build.env.PUBLIC_ADDRESS}}\",\r\n            \"password\": \"{{server.build.env.SERVER_PASSWORD}}\",\r\n            \"maxPlayers\": \"{{server.build.env.MAX_PLAYERS}}\",\r\n            \"reopenConsoleOnClose\": \"false\"\r\n        }\r\n    }\r\n}",
+    "startup": "{\r\n    \"done\": \"God Save Birmingham server is listening on port\"\r\n}",
+    "logs": "{}",
+    "stop": "^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\r\n# steamcmd Base Installation Script\r\n#\r\n# Server Files: /mnt/server\r\n# Image to install with is 'ghcr.io/ptero-eggs/installers:debian'\r\n\r\n##\r\n#\r\n# Variables\r\n# STEAM_USER, STEAM_PASS, STEAM_AUTH - Steam user setup. If a user has 2fa enabled it will most likely fail due to timeout. Leave blank for anon install.\r\n# SRCDS_APPID - Steam app id of the dedicated server tool, 5206950.\r\n# SRCDS_BETAID - beta branch of a steam app. Leave blank to install normal branch\r\n# SRCDS_BETAPASS - password for a beta branch should one be required during private or closed testing phases.. Leave blank for no password.\r\n# INSTALL_FLAGS - Any additional SteamCMD flags to pass during install.\r\n#\r\n ##\r\n\r\n# Install packages. Default packages below are not required if using our existing install image thus speeding up the install process.\r\n#apt -y update\r\n#apt -y --no-install-recommends install curl lib32gcc-s1 ca-certificates\r\n\r\n## just in case someone removed the defaults.\r\nif [[ \"${STEAM_USER}\" == \"\" ]] || [[ \"${STEAM_PASS}\" == \"\" ]]; then\r\n    echo -e \"steam user is not set.\\n\"\r\n    echo -e \"Using anonymous user.\\n\"\r\n    STEAM_USER=anonymous\r\n    STEAM_PASS=\"\"\r\n    STEAM_AUTH=\"\"\r\nelse\r\n    echo -e \"user set to ${STEAM_USER}\"\r\nfi\r\n\r\n## download and install steamcmd\r\ncd /tmp\r\nmkdir -p /mnt/server/steamcmd\r\ncurl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\r\ntar -xzvf steamcmd.tar.gz -C /mnt/server/steamcmd\r\nmkdir -p /mnt/server/steamapps # Fix steamcmd disk write error when this folder is missing\r\ncd /mnt/server/steamcmd\r\n\r\n# SteamCMD fails otherwise for some reason, even running as root.\r\n# This is changed at the end of the install process anyways.\r\nchown -R root:root /mnt\r\nexport HOME=/mnt/server\r\n\r\n## install game using steamcmd\r\n##\r\n## The dedicated server is a Windows build. The app publishes a Linux depot, but\r\n## it only holds the Steamworks runtime - the server binaries themselves are\r\n## Windows only, so the Windows platform is forced here. The native Steam\r\n## client library is staged further down, because the Windows one needs it.\r\n./steamcmd.sh +force_install_dir /mnt/server +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} +@sSteamCmdForcePlatformType windows +app_update ${SRCDS_APPID} $( [[ -z ${SRCDS_BETAID} ]] || printf %s \"-beta ${SRCDS_BETAID}\" ) $( [[ -z ${SRCDS_BETAPASS} ]] || printf %s \"-betapassword ${SRCDS_BETAPASS}\" ) ${INSTALL_FLAGS} validate +quit ## other flags may be needed depending on install.\r\n\r\n## stage the native Steam client library\r\n##\r\n## The server's Steam API loads steamclient64.dll, and that library talks to the\r\n## native one in this folder. Without it the API init fails and the server\r\n## shuts down again right after it loaded the map.\r\nmkdir -p /mnt/server/.steam/sdk64\r\ncp -v linux64/steamclient.so ../.steam/sdk64/steamclient.so\r\n\r\n## stage the Windows Steam client libraries\r\n##\r\n## The Steam API also looks for steamclient64.dll next to the server executable,\r\n## so the Windows redistributable has to be copied there as well.\r\nfor lib in steamclient64.dll steamclient.dll steamwebrtc64.dll steamwebrtc.dll; do\r\n    if [ ! -f \"/mnt/server/${lib}\" ]; then\r\n        echo >&2\r\n        echo \"error: ${lib} is missing from the installation.\" >&2\r\n        exit 1\r\n    fi\r\n    cp -v \"/mnt/server/${lib}\" \"/mnt/server/MZClient/Binaries/Win64/${lib}\"\r\ndone\r\n\r\n## The server writes its own configuration on the first run. Seed it here so\r\n## the panel has something to edit, and so reopenConsoleOnClose is off from\r\n## the start: the console helper it spawns gets EOF on stdin in a container and\r\n## exits, and the server then respawns it in a loop until it gives up.\r\nmkdir -p /mnt/server/MZClient/Saved/Config\r\nif [ ! -f /mnt/server/MZClient/Saved/Config/serverconfig.json ]; then\r\ncat << EOF > /mnt/server/MZClient/Saved/Config/serverconfig.json\r\n{\r\n    \"port\": 27015,\r\n    \"public\": true,\r\n    \"name\": \"God Save Birmingham Server\",\r\n    \"description\": \"\",\r\n    \"publicAddress\": \"0.0.0.0\",\r\n    \"password\": \"\",\r\n    \"maxPlayers\": 4,\r\n    \"reopenConsoleOnClose\": false\r\n}\r\nEOF\r\nfi\r\n\r\n## create .pteroignore to only back up necessary files\r\nif [ ! -f /mnt/server/.pteroignore ]; then\r\n    echo \"Creating default .pteroignore\"\r\n    cat << EOF > /mnt/server/.pteroignore\r\n    *\r\n    !MZClient/Saved/Config/serverconfig.json\r\n    !MZClient/Saved/SaveGames/\r\nEOF\r\nfi\r\n\r\n## install end\r\necho \"-----------------------------------------\"\r\necho \"Installation completed...\"\r\necho \"-----------------------------------------\"\r\n",
+      "container": "ghcr.io\/ptero-eggs\/installers:debian",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "[STEAM] App ID",
+      "description": "Steam App ID of the God Save Birmingham dedicated server tool.",
+      "env_variable": "SRCDS_APPID",
+      "default_value": "5206950",
+      "user_viewable": false,
+      "user_editable": false,
+      "rules": "required|numeric|max:20",
+      "field_type": "text"
+    },
+    {
+      "name": "[STEAM] Auto Update",
+      "description": "Automatically update the server on boot.",
+      "env_variable": "AUTO_UPDATE",
+      "default_value": "1",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|boolean|in:0,1",
+      "field_type": "text"
+    },
+    {
+      "name": "[SERVER] Server Name",
+      "description": "Name shown in the server browser.",
+      "env_variable": "SERVER_NAME",
+      "default_value": "God Save Birmingham Server",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|max:64",
+      "field_type": "text"
+    },
+    {
+      "name": "[SERVER] Server Description",
+      "description": "Description shown next to the server name in the server browser.",
+      "env_variable": "SERVER_DESCRIPTION",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string|max:200",
+      "field_type": "text"
+    },
+    {
+      "name": "[SERVER] Server Password",
+      "description": "Password required to join the server. Leave empty for none.",
+      "env_variable": "SERVER_PASSWORD",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string|max:64",
+      "field_type": "text"
+    },
+    {
+      "name": "[SERVER] Max Players",
+      "description": "Maximum number of simultaneous players. The publisher recommends 4.",
+      "env_variable": "MAX_PLAYERS",
+      "default_value": "4",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|numeric|min:1|max:128",
+      "field_type": "text"
+    },
+    {
+      "name": "[SERVER] Public",
+      "description": "Make the server publicly visible in the server browser.",
+      "env_variable": "SERVER_PUBLIC",
+      "default_value": "1",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|boolean|in:0,1",
+      "field_type": "text"
+    },
+    {
+      "name": "[SERVER] Public Address",
+      "description": "IP address players use to reach the server. Leave as 0.0.0.0 to let the server work it out.",
+      "env_variable": "PUBLIC_ADDRESS",
+      "default_value": "0.0.0.0",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|max:64",
+      "field_type": "text"
+    },
+    {
+      "name": "[SERVER] Query Port",
+      "description": "Steam query port. Needs its own allocation and firewall rule.",
+      "env_variable": "QUERY_PORT",
+      "default_value": "9878",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|numeric|between:1024,65535",
+      "field_type": "text"
+    }
+  ]
+}
