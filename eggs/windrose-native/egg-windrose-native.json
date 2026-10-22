@@ -1,0 +1,102 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-09-09T00:09:39+01:00",
+    "name": "Windrose Native",
+    "author": "talk@savagecore.uk",
+    "description": "Embark on a PvE survival adventure in the Age of Piracy. Fight on land and sea, solo or with friends. Build, craft and explore vast open world filled with dark secrets. Master soulslite combat and take on challenging bosses, command your ship and plunder unspoken treasures!",
+    "features": [],
+    "docker_images": {
+        "ghcr.io\/ptero-eggs\/yolks:ubuntu": "ghcr.io\/ptero-eggs\/yolks:ubuntu"
+    },
+    "file_denylist": [],
+    "startup": "mkdir -p \/home\/container\/tmp && export TMPDIR=\/home\/container\/tmp TEMP=\/home\/container\/tmp TEMPDIR=\/home\/container\/tmp && chmod +x .\/R5\/Binaries\/Linux\/WindroseServer-Linux-Shipping && .\/R5\/Binaries\/Linux\/WindroseServer-Linux-Shipping R5",
+    "config": {
+        "files": "{\n    \"R5\/ServerDescription.json\": {\n        \"parser\": \"json\",\n        \"find\": {\n            \"ServerDescription_Persistent.ServerName\": \"{{server.build.env.SERVER_NAME}}\",\n            \"ServerDescription_Persistent.InviteCode\": \"{{server.build.env.INVITE_CODE}}\",\n            \"ServerDescription_Persistent.IsPasswordProtected\": \"{{server.build.env.SERVER_PASSWORD_PROTECTED}}\",\n            \"ServerDescription_Persistent.Password\": \"{{server.build.env.SERVER_PASSWORD}}\",\n            \"ServerDescription_Persistent.MaxPlayerCount\": \"{{server.build.env.MAX_PLAYERS}}\",\n            \"ServerDescription_Persistent.P2pProxyAddress\": \"{{server.build.env.P2P_PROXY}}\",\n            \"ServerDescription_Persistent.UseDirectConnection\": \"{{server.build.env.USE_DIRECT_CONNECTION}}\",\n            \"ServerDescription_Persistent.DirectConnectionServerAddress\": \"{{server.build.default.ip}}\",\n            \"ServerDescription_Persistent.DirectConnectionServerPort\": \"{{server.build.default.port}}\"\n        }\n    }\n}",
+        "startup": "{\r\n    \"done\": \"Bringing up level for play took\"\r\n}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!\/bin\/bash\n# Windrose native Linux install script\n#\n# Server Files: \/mnt\/server\n# Image to install with is 'ghcr.io\/ptero-eggs\/installers:debian'\n#\n# The Steam depot for this app id has no Linux files (Windows only), so the\n# native Linux server binaries can only be obtained from the official\n# 'windroseserver\/windroseserver' Docker image. That image bakes in\n# `USER ue_user`, and Wings runs install containers as whatever user the\n# image specifies (there is no way to force root via the egg schema), so we\n# cannot just `cp` from inside that image - it has no write permission on\n# \/mnt\/server. Instead, pull the image layers directly from the registry\n# with this (root) installer and extract them here.\n#\n# ponytail: assumes no OCI whiteout files under \/home\/ue_user\/app (true as of\n# writing - the image only adds files at that path, never removes). If a\n# future image version deletes\/replaces files via a whiteout, switch to a\n# real OCI unpacker (e.g. skopeo copy) instead of this manual layer extract.\n\nset -e\n\nIMAGE=\"windroseserver\/windroseserver\"\nTAG=\"latest\"\nSCRATCH=\"\/mnt\/server\/_extract\"\n\necho \"Authenticating with Docker Hub...\"\nTOKEN=$(curl -fsSL \"https:\/\/auth.docker.io\/token?service=registry.docker.io&scope=repository:${IMAGE}:pull\" | jq -r '.token \/\/ empty')\nif [ -z \"${TOKEN}\" ]; then\n    echo \"ERROR: Failed to authenticate with Docker Hub.\"\n    exit 1\nfi\n\necho \"Fetching manifest for ${IMAGE}:${TAG}...\"\nMANIFEST=$(curl -fsSL -H \"Authorization: Bearer ${TOKEN}\" -H \"Accept: application\/vnd.docker.distribution.manifest.v2+json\" \"https:\/\/registry-1.docker.io\/v2\/${IMAGE}\/manifests\/${TAG}\")\nif [ -z \"${MANIFEST}\" ]; then\n    echo \"ERROR: Failed to fetch manifest.\"\n    exit 1\nfi\n\n# Extract layer digests (jq skips the config digest structurally)\nLAYER_DIGESTS=$(echo \"${MANIFEST}\" | jq -r '.layers[]?.digest')\nif [ -z \"${LAYER_DIGESTS}\" ]; then\n    echo \"ERROR: No layers found in manifest.\"\n    exit 1\nfi\nLAYER_COUNT=$(echo \"${LAYER_DIGESTS}\" | wc -l)\necho \"Found ${LAYER_COUNT} layers to download.\"\n\nmkdir -p \"${SCRATCH}\"\ntrap 'rm -rf \"${SCRATCH}\"' EXIT\n\nfor DIGEST in ${LAYER_DIGESTS}; do\n    echo \"Downloading and extracting layer ${DIGEST}...\"\n    curl -fsSL -H \"Authorization: Bearer ${TOKEN}\" \"https:\/\/registry-1.docker.io\/v2\/${IMAGE}\/blobs\/${DIGEST}\" | tar -xz -C \"${SCRATCH}\"\n    if [ $? -ne 0 ]; then\n        echo \"ERROR: Failed to download or extract layer ${DIGEST}.\"\n        exit 1\n    fi\ndone\n\n# Verify the server binary exists before copying\nif [ ! -f \"${SCRATCH}\/home\/ue_user\/app\/R5\/Binaries\/Linux\/WindroseServer-Linux-Shipping\" ]; then\n    echo \"ERROR: WindroseServer-Linux-Shipping binary not found in extracted image.\"\n    exit 1\nfi\n\n# Back up mod trios (pak\/ucas\/utoc) before the vendor copy overwrites Content\/Paks.\n# Mods live in R5\/Content\/Paks\/ (live) or Mods\/ (staging). We preserve complete\n# trios only - all three suffixes for a given stem - so UE never sees a dangling file.\nMOD_BAK=\"\/tmp\/pakmods.bak\"\nmkdir -p \"${MOD_BAK}\"\nMOD_COUNT=0\nfor STEM in $(ls \/mnt\/server\/R5\/Content\/Paks\/*_P.pak 2>\/dev\/null | sed -E 's\/\\\/([^\/]*_P)\\.pak$\/\\1\/' | sort -u); do\n    if [ -f \"\/mnt\/server\/R5\/Content\/Paks\/${STEM}.pak\" ] && [ -f \"\/mnt\/server\/R5\/Content\/Paks\/${STEM}.ucas\" ] && [ -f \"\/mnt\/server\/R5\/Content\/Paks\/${STEM}.utoc\" ]; then\n        cp -a \"\/mnt\/server\/R5\/Content\/Paks\/${STEM}.\"{pak,ucas,utoc} \"${MOD_BAK}\/\"\n        MOD_COUNT=$((MOD_COUNT + 1))\n    fi\ndone\n# Also copy complete trios from Mods\/ staging if present\nif [ -d \/mnt\/server\/Mods ]; then\n    for STEM in $(ls \/mnt\/server\/Mods\/*_P.pak 2>\/dev\/null | sed -E 's\/\\\/([^\/]*_P)\\.pak$\/\\1\/' | sort -u); do\n        if [ -f \"\/mnt\/server\/Mods\/${STEM}.pak\" ] && [ -f \"\/mnt\/server\/Mods\/${STEM}.ucas\" ] && [ -f \"\/mnt\/server\/Mods\/${STEM}.utoc\" ]; then\n            cp -a \"\/mnt\/server\/Mods\/${STEM}.\"{pak,ucas,utoc} \"${MOD_BAK}\/\"\n            MOD_COUNT=$((MOD_COUNT + 1))\n        fi\n    done\nfi\nif [ \"${MOD_COUNT}\" -gt 0 ]; then\n    echo \"Backed up ${MOD_COUNT} mod trio(s).\"\nfi\n\n# The vendor image always ships R5\/ServerDescription.json as an empty stub.\n# On a reinstall (= how this egg updates the game) that would silently wipe\n# the live server identity and world selection, so preserve it across the copy.\nif [ -f \/mnt\/server\/R5\/ServerDescription.json ]; then\n    cp -a \/mnt\/server\/R5\/ServerDescription.json \/tmp\/ServerDescription.json.bak\nfi\n\ncp -a \"${SCRATCH}\/home\/ue_user\/app\/.\" \/mnt\/server\/\n\n# Extract the new DeploymentId from the vendor stub before restoring the\n# preserved file, so the saved server identity does not carry a stale\n# version that would cause client connection failures.\nVENDOR_DEPLOYMENT_ID=\"\"\nif [ -f \/mnt\/server\/R5\/ServerDescription.json ]; then\n    VENDOR_DEPLOYMENT_ID=$(jq -r '.DeploymentId \/\/ empty' \/mnt\/server\/R5\/ServerDescription.json 2>\/dev\/null) || true\nfi\n\nif [ -f \/tmp\/ServerDescription.json.bak ]; then\n    cp -a \/tmp\/ServerDescription.json.bak \/mnt\/server\/R5\/ServerDescription.json\n    rm -f \/tmp\/ServerDescription.json.bak\n\n    if [ -n \"${VENDOR_DEPLOYMENT_ID}\" ]; then\n        jq --arg id \"${VENDOR_DEPLOYMENT_ID}\" '.DeploymentId = $id' \/mnt\/server\/R5\/ServerDescription.json > \/tmp\/sd.json && mv \/tmp\/sd.json \/mnt\/server\/R5\/ServerDescription.json\n        echo \"Updated DeploymentId to ${VENDOR_DEPLOYMENT_ID}\"\n    fi\nfi\n\n# Restore mod trios into the new Content\/Paks directory\nif [ \"${MOD_COUNT}\" -gt 0 ]; then\n    cp -a \"${MOD_BAK}\/\"* \"\/mnt\/server\/R5\/Content\/Paks\/\"\n    echo \"Restored ${MOD_COUNT} mod trio(s) to Content\/Paks.\"\nfi\nrm -rf \"${MOD_BAK}\"\n\n# Strip debug symbols and debug binary to save ~2.1GB of disk space\necho \"Stripping debug files to save disk space...\"\nDEBUG_COUNT=$(ls \/mnt\/server\/R5\/Binaries\/Linux\/*.debug 2>\/dev\/null | wc -l)\nSYM_COUNT=$(ls \/mnt\/server\/R5\/Binaries\/Linux\/*.sym 2>\/dev\/null | wc -l)\nrm -f \/mnt\/server\/R5\/Binaries\/Linux\/*.debug\nrm -f \/mnt\/server\/R5\/Binaries\/Linux\/*.sym\nif [ \"${DEBUG_COUNT}\" -gt 0 ] || [ \"${SYM_COUNT}\" -gt 0 ]; then\n    echo \"Removed ${DEBUG_COUNT} .debug and ${SYM_COUNT} .sym files.\"\nfi\n\n# Ensure the server binary is executable\nchmod +x \/mnt\/server\/R5\/Binaries\/Linux\/WindroseServer-Linux-Shipping\n\necho \"-----------------------------------------\"\necho \"Installation completed...\"\necho \"-----------------------------------------\"",
+            "container": "ghcr.io\/ptero-eggs\/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Server Name",
+            "description": "The server name",
+            "env_variable": "SERVER_NAME",
+            "default_value": "Pterodactyl Windrose Server",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:40",
+            "field_type": "text"
+        },
+        {
+            "name": "Use Direct Connection",
+            "description": "Enable direct connection instead of invite codes, when set to 1 (enabled) it will disable the use of the Invite Code.",
+            "env_variable": "USE_DIRECT_CONNECTION",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Server Password",
+            "description": "The server password",
+            "env_variable": "SERVER_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:30",
+            "field_type": "text"
+        },
+        {
+            "name": "Max players",
+            "description": "Maximum allowed players",
+            "env_variable": "MAX_PLAYERS",
+            "default_value": "8",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:20",
+            "field_type": "text"
+        },
+        {
+            "name": "Invite code",
+            "description": "Invite code (0-9, a-z, A-Z). Min 6 chars, case sensitive. Leave empty to generate a random code on each server start. Ignored when Direct Connection is enabled.",
+            "env_variable": "INVITE_CODE",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|min:6|max:32|regex:\/^[a-zA-Z0-9]+$\/",
+            "field_type": "text"
+        },
+        {
+            "name": "Password Protected",
+            "description": "Off by default, enable this when using a server password",
+            "env_variable": "SERVER_PASSWORD_PROTECTED",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "P2P PROXY",
+            "description": "Don't change this",
+            "env_variable": "P2P_PROXY",
+            "default_value": "127.0.0.1",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|in:127.0.0.1",
+            "field_type": "text"
+        }
+    ]
+}
